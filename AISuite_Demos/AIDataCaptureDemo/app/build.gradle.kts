@@ -112,6 +112,13 @@ dependencies {
     //Below dependency is to get product Recognition model for AI Suite SDK
     implementation(libs.product.and.shelf.recognizer) { artifact { type = "aar" } }
 
+    // For HTTP requests
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // For JSON parsing
+    implementation("com.google.code.gson:gson:2.10.1")
+    // Coroutines for async
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
     androidTestImplementation(platform(libs.androidx.compose.bom))
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)

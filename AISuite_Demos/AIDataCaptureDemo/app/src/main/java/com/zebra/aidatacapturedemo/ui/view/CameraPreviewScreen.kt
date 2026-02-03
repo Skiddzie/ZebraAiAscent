@@ -948,8 +948,10 @@ private fun DrawProductRecognitionResult(
                     scaledBBoxLeftInPx,
                     scaledBBoxTopInPx + (rectangleHeight) / 2
                 )
+                val label = productResult.sfName?.takeIf { it.isNotBlank() } ?: productResult.text
+
                 drawContext.canvas.nativeCanvas.drawText(
-                    productResult.text,
+                    label,
                     textOffset.x,
                     textOffset.y,
                     paint

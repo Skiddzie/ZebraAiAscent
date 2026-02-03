@@ -30,6 +30,9 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.time.TimeSource
 
+import com.zebra.aidatacapturedemo.salesforce.SalesforceAPI
+import com.zebra.aidatacapturedemo.salesforce.models.Product2
+
 /**
  * [ProductEnrollmentRecognition] class is used to perform the product recognition on the Camera Live Preview.
  * It uses the Localizer to detect shelves, labels, peg labels, products which generates
@@ -102,6 +105,13 @@ class ProductEnrollmentRecognition(
                 isAnalyzing = true
             }
         }
+    }
+
+    private var salesforceAPI: SalesforceAPI? = null
+
+    // Initialize Salesforce (call this after authentication)
+    fun initializeSalesforce(instanceUrl: String, accessToken: String) {
+        salesforceAPI = SalesforceAPI(instanceUrl, accessToken)
     }
 
     fun startAnalyzing() {
@@ -466,13 +476,74 @@ class ProductEnrollmentRecognition(
                         recognizer?.findRecognitions(descriptors, executorService)?.get()
                     Log.i(TAG, "Recognitions - ${recognitions?.size}")
 
-                    recognitions?.let { it1 ->
-                        toProductData(
-                            bitmap!!, products,
-                            it1
-                        )
-                    }?.let { it2 ->
-                        updateProductResults(it2)
+                    recognitions?.forEachIndexed { index, recognition ->
+                        Log.i(TAG, "═══════════════════════════════════════")
+                        Log.i(TAG, "Product #$index:")
+                        Log.i(TAG, "  Recognition object: $recognition")  // This will print the whole object
+                        Log.i(TAG, "  Recognition class: ${recognition.javaClass.name}")  // Shows the class type
+                        // Remove the id and confidence lines for now
+                        Log.i(TAG, "  Bounding Box: (${products[index].xmin}, ${products[index].ymin}) to (${products[index].xmax}, ${products[index].ymax})")
+                        Log.i(TAG, "  Width: ${products[index].xmax - products[index].xmin}")
+                        Log.i(TAG, "  Height: ${products[index].ymax - products[index].ymin}")
+                        Log.i(TAG, "═══════════════════════════════════════")
+                    }
+
+                    recognitions?.let { recs ->
+                        toProductData(bitmap!!, products, recs)
+                    }?.let { productList ->
+                        Log.i(TAG, "╔═══════════════════════════════════════╗")
+                        Log.i(TAG, "║  FINAL PRODUCT RECOGNITION RESULTS   ║")
+                        Log.i(TAG, "╚═══════════════════════════════════════╝")
+
+                        // 1) Update UI immediately with SKU-only results
+                        updateProductResults(productList)
+
+                        val api = salesforceAPI
+                        if (api != null) {
+                            // 2) In background: SF lookups + logs + then update UI with names
+                            scope.launch {
+                                productList.forEachIndexed { index, productData ->
+                                    Log.i(TAG, "═══════════════════════════════════════")
+                                    Log.i(TAG, "Product #${index + 1}:")
+                                    Log.i(TAG, "  Detected SKU: ${productData.text}")
+                                    Log.i(TAG, "  Position: (${productData.bBox.xmin.toInt()}, ${productData.bBox.ymin.toInt()})")
+                                    Log.i(TAG, "  Size: ${productData.crop.width}x${productData.crop.height}")
+
+                                    if (productData.text.isNotBlank()) {
+                                        val sfProduct = api.getProductBySKU(productData.text)
+                                        if (sfProduct != null) {
+                                            productData.sfName = sfProduct.name
+
+                                            Log.i(TAG, "  ✓ FOUND IN SALESFORCE:")
+                                            Log.i(TAG, "    ID: ${sfProduct.id}")
+                                            Log.i(TAG, "    Name: ${sfProduct.name ?: "N/A"}")
+                                            Log.i(TAG, "    Code: ${sfProduct.productCode ?: "N/A"}")
+                                            Log.i(TAG, "    Desc: ${sfProduct.description ?: "N/A"}")
+                                            Log.i(TAG, "    Family: ${sfProduct.family ?: "N/A"}")
+                                            Log.i(TAG, "    Active: ${sfProduct.isActive ?: false}")
+                                        } else {
+                                            productData.sfName = null
+                                            Log.w(TAG, "  ✗ NOT FOUND IN SALESFORCE")
+                                        }
+                                    } else {
+                                        productData.sfName = null
+                                        Log.w(TAG, "  ✗ NO SKU DETECTED")
+                                    }
+
+                                    Log.i(TAG, "═══════════════════════════════════════")
+                                }
+
+                                // 3) Push the enriched list back to UI on Main (safe + reliable)
+                                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                                    updateProductResults(productList.toMutableList())
+                                }
+                            }
+                        } else {
+                            Log.w(TAG, "Salesforce API not initialized; skipping SF enrichment")
+                        }
+
+                        val elapsed2 = timeSource.markNow() - mark2
+                        Log.d(TAG, "Recognizer - $elapsed2")
                     }
                     val elapsed2 = timeSource.markNow() - mark2
                     Log.d(TAG, "Recognizer - ${elapsed2}")

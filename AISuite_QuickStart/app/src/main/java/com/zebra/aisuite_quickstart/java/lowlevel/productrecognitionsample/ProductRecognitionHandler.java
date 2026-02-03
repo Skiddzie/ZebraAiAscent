@@ -52,7 +52,7 @@ public class ProductRecognitionHandler {
             String toPath = context.getFilesDir() + "/";
             copyFromAssets(indexFilename, toPath);
             copyFromAssets(labelsFilename, toPath);
-
+            Log.d(TAG, "product recognition path: " + toPath + indexFilename);
             // Create settings with base model
             ModuleRecognizer.Settings settings = new ModuleRecognizer.Settings(mavenModelName);
 

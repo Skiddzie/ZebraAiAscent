@@ -85,6 +85,11 @@ import java.util.concurrent.Executor
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+import com.zebra.aidatacapturedemo.salesforce.SalesforceAuth
+import com.zebra.aidatacapturedemo.salesforce.SalesforceConfig
+import com.zebra.aidatacapturedemo.salesforce.models.AuthResponse
+
+import kotlinx.coroutines.withContext
 private const val TAG = "AIDataCaptureDemoViewModel"
 private const val CAMERA_TAG = "AIDCDemo_CameraProp"
 
@@ -116,6 +121,8 @@ class AIDataCaptureDemoViewModel(
     private var barcodeAnalyzer: BarcodeAnalyzer? = null
     private var genericEntityTrackerAnalyzer : GenericEntityTrackerAnalyzer? = null
     private var productEnrollmentRecognition: ProductEnrollmentRecognition? = null
+
+    private var salesforceAuthResponse: AuthResponse? = null
 
     companion object {
         fun factory() = viewModelFactory {
@@ -178,6 +185,8 @@ class AIDataCaptureDemoViewModel(
                             cacheDir = context.filesDir.absolutePath
                         )
                     productEnrollmentRecognition?.initialize()
+
+                    authenticateSalesforce()
                 }
 
                 UsecaseState.OCRBarcodeFind.value->{
@@ -240,6 +249,51 @@ class AIDataCaptureDemoViewModel(
             }
         }
         genericEntityTrackerAnalyzer = null
+    }
+
+    fun authenticateSalesforce() {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                Log.d(TAG, "Authenticating with Salesforce...")
+
+                val authResponse = SalesforceAuth.authenticate(
+                    instanceUrl = SalesforceConfig.LOGIN_URL,
+                    clientId = SalesforceConfig.CLIENT_ID,
+                    clientSecret = SalesforceConfig.CLIENT_SECRET,
+                    username = SalesforceConfig.USERNAME,
+                    password = SalesforceConfig.PASSWORD,
+                    securityToken = SalesforceConfig.SECURITY_TOKEN
+                )
+                Log.d(TAG, "authResponse: $authResponse");
+                if (authResponse != null) {
+                    salesforceAuthResponse = authResponse
+
+                    // Initialize Salesforce API in ProductEnrollmentRecognition
+                    productEnrollmentRecognition?.initializeSalesforce(
+                        authResponse.instanceUrl,
+                        authResponse.accessToken
+                    )
+
+                    Log.i(TAG, "✓ Salesforce authentication successful!")
+                    Log.i(TAG, "  Instance URL: ${authResponse.instanceUrl}")
+                    Log.i(TAG, "  Token Type: ${authResponse.tokenType}")
+
+                    withContext(Dispatchers.Main) {
+                        toast("Salesforce connected!")
+                    }
+                } else {
+                    Log.e(TAG, "✗ Salesforce authentication failed")
+                    withContext(Dispatchers.Main) {
+                        toast("Salesforce authentication failed")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Salesforce auth error: ${e.message}")
+                withContext(Dispatchers.Main) {
+                    toast("Salesforce error: ${e.message}")
+                }
+            }
+        }
     }
 
     /**

@@ -13,7 +13,12 @@ import com.zebra.ai.vision.detector.Recognizer.Recognition
  * @param bBox: BBox
  * @param crop: Bitmap
  */
-class ProductData(var text: String, var bBox: BBox, var crop : Bitmap)
+class ProductData(
+    var text: String,
+    var bBox: BBox,
+    var crop: Bitmap,
+    var sfName: String? = null
+)
 
 /**
  * toProductData function used to convert input bitmap, products and recognitions to product data
