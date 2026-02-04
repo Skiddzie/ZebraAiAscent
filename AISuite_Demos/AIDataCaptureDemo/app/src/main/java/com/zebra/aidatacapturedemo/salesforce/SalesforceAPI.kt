@@ -2,12 +2,18 @@ package com.zebra.aidatacapturedemo.salesforce
 
 import android.util.Log
 import com.google.gson.Gson
+import com.zebra.aidatacapturedemo.salesforce.models.CreateResponse
 import com.zebra.aidatacapturedemo.salesforce.models.Product2
 import com.zebra.aidatacapturedemo.salesforce.models.SalesforceQueryResponse
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
+import kotlin.jvm.java
+import kotlin.reflect.KClass
+
 
 class SalesforceAPI(
     private val instanceUrl: String,  // e.g., "https://yourinstance.salesforce.com"
@@ -61,6 +67,53 @@ class SalesforceAPI(
             null
         } catch (e: Exception) {
             Log.e(TAG, "Error querying Salesforce: ${e.message}")
+            null
+        }
+    }
+
+    suspend fun createProduct(
+        productName: String,
+        productCode: String,
+        description: String? = null,
+        isActive: Boolean = true
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            val url = "$instanceUrl/services/data/v60.0/sobjects/Product2"
+
+            val fieldMap = mutableMapOf<String, Any>(
+                "Name" to productName,
+                "ProductCode" to productCode,
+                "StockKeepingUnit" to productCode,
+                "IsActive" to isActive,
+                "ASCENTERP__Default_Unit_Of_Measure__c" to "a0aRL00000JgMUDYA3"
+            )
+
+            if (description != null) {
+                fieldMap["Description"] = description
+            }
+
+            val jsonBody = gson.toJson(fieldMap)
+            val requestBody = jsonBody.toRequestBody("application/json".toMediaType())
+
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer $accessToken")
+                .post(requestBody)
+                .build()
+
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string()
+
+            if (response.isSuccessful && responseBody != null) {
+                val createResponse = gson.fromJson(responseBody, CreateResponse::class.java)
+                Log.d(TAG, "Success! Product created with ID: ${createResponse.id}")
+                createResponse.id
+            } else {
+                Log.e(TAG, "Salesforce Error: ${response.code} - $responseBody")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Caught error: ${e.message}")
             null
         }
     }

@@ -32,6 +32,7 @@ import kotlin.time.TimeSource
 
 import com.zebra.aidatacapturedemo.salesforce.SalesforceAPI
 import com.zebra.aidatacapturedemo.salesforce.models.Product2
+import kotlinx.coroutines.isActive
 
 /**
  * [ProductEnrollmentRecognition] class is used to perform the product recognition on the Camera Live Preview.
@@ -406,6 +407,27 @@ class ProductEnrollmentRecognition(
         scope.launch {
             for (product in productDataList) {
                 if (product.text.isNotEmpty()) {
+                    //
+                    //
+                    //switched the order of these
+                    //causing it to stall with throbber
+                    // figure that out !
+                    salesforceAPI?.let { api ->
+                        Log.d(TAG, "Syncing new enrollment to Sal esforce: ${product.text}")
+                        val sfId = api.createProduct(
+                            productName = "test product ${product.text}",
+                            productCode = product.text,
+                            description = "ignore this beautiful description so full of life and meriment",
+                            isActive = true
+                        )
+
+                        if (sfId != null) {
+                            Log.i(TAG, "Successfully synced to Salesforce with ID: $sfId")
+                        } else {
+                            Log.e(TAG, "Failed to sync ${product.text} to Salesforce")
+                            return@launch
+                        }
+                    }
                     val arrayOfDescriptor =
                         extractor?.generateSingleDescriptor(product.crop, executorService)?.get()
                     featureStorage!!.addDescriptors(product.text, arrayOfDescriptor, true)
