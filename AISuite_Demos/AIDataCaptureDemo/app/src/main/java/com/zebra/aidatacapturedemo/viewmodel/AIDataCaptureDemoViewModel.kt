@@ -53,6 +53,7 @@ import com.zebra.aidatacapturedemo.data.OCRFilterData
 import com.zebra.aidatacapturedemo.data.OCRFilterType
 import com.zebra.aidatacapturedemo.data.OcrBarcodeFindSettings
 import com.zebra.aidatacapturedemo.data.ProductData
+import com.zebra.aidatacapturedemo.data.ProductEnrollmentState
 import com.zebra.aidatacapturedemo.data.ProductRecognitionSettings
 import com.zebra.aidatacapturedemo.data.ResultData
 import com.zebra.aidatacapturedemo.data.RetailShelfSettings
@@ -344,7 +345,7 @@ class AIDataCaptureDemoViewModel(
         }
     }
 
-    @SuppressLint("ClickableViewAccessibility")
+    @SuppressLint("ClickableViewAccessibility", "RestrictedApi")
     public fun setupCameraController(
         previewView: PreviewView,
         analysisUseCaseCameraResolution: Size,
@@ -1386,7 +1387,7 @@ class AIDataCaptureDemoViewModel(
                 barcodeAnalyzer?.let {
                     genericEntityTrackerAnalyzer?.addDecoder(it.getDetector()!!)
                     val analyzer = genericEntityTrackerAnalyzer?.setupEntityTrackerAnalyzer(activityLifecycle)
-                    analysisUseCase?.setAnalyzer(executor!!, analyzer!!)
+                    analysisUseCase?.setAnalyzer(executor!!, analyzer!! as ImageAnalysis.Analyzer)
                 }
             }
 
@@ -1416,7 +1417,7 @@ class AIDataCaptureDemoViewModel(
                 ocrAnalyzer?.let {
                     genericEntityTrackerAnalyzer?.addDecoder(it.getDetector()!!)
                     val analyzer = genericEntityTrackerAnalyzer?.setupEntityTrackerAnalyzer(activityLifecycle)
-                    analysisUseCase?.setAnalyzer(executor!!, analyzer!!)
+                    analysisUseCase?.setAnalyzer(executor!!, analyzer!! as ImageAnalysis.Analyzer)
                 }
             }
         }
@@ -1718,10 +1719,10 @@ class AIDataCaptureDemoViewModel(
         }
     }
 
-    fun updateProductEnrollmentState(state: Boolean) {
+    fun updateProductEnrollmentState(state: ProductEnrollmentState) {
         _uiState.update { currentState ->
             currentState.copy(
-                isProductEnrollmentCompleted = state
+                productEnrollmentState = state
             )
         }
     }
@@ -1822,7 +1823,7 @@ class AIDataCaptureDemoViewModel(
                 // clear all the previous results
                 updateProductRecognitionResult(results = null)
                 updateRetailShelfDetectionResult(results = null)
-                updateProductEnrollmentState(state = false)
+                updateProductEnrollmentState(ProductEnrollmentState.NOT_STARTED)
                 startPreviewAnalysis()
                 startProcessing()
             }

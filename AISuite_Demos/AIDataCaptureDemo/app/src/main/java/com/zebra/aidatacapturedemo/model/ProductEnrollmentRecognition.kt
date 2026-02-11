@@ -16,6 +16,7 @@ import com.zebra.ai.vision.detector.Localizer
 import com.zebra.ai.vision.detector.Recognizer
 import com.zebra.aidatacapturedemo.data.AIDataCaptureDemoUiState
 import com.zebra.aidatacapturedemo.data.ProductData
+import com.zebra.aidatacapturedemo.data.ProductEnrollmentState
 import com.zebra.aidatacapturedemo.data.toProductData
 import com.zebra.aidatacapturedemo.model.FileUtils.Companion.databaseFile
 import com.zebra.aidatacapturedemo.viewmodel.AIDataCaptureDemoViewModel
@@ -33,6 +34,7 @@ import kotlin.time.TimeSource
 import com.zebra.aidatacapturedemo.salesforce.SalesforceAPI
 import com.zebra.aidatacapturedemo.salesforce.models.Product2
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 
 /**
  * [ProductEnrollmentRecognition] class is used to perform the product recognition on the Camera Live Preview.
@@ -351,7 +353,7 @@ class ProductEnrollmentRecognition(
                 .thenAccept { recognizerInstance: Recognizer ->
                     recognizer = recognizerInstance
                     if (isEnrollmentRequested) {
-                        updateProductEnrollmentState(state = true)
+                        updateProductEnrollmentState(ProductEnrollmentState.COMPLETED_SUCCESS)
                     } else {
                         updateRetailShelfModelDemoReady(true)
                     }
@@ -404,36 +406,63 @@ class ProductEnrollmentRecognition(
             return
         }
         Log.i(TAG, "Num Products - ${productDataList.size}")
-        scope.launch {
-            for (product in productDataList) {
-                if (product.text.isNotEmpty()) {
-                    //
-                    //
-                    //switched the order of these
-                    //causing it to stall with throbber
-                    // figure that out !
-                    salesforceAPI?.let { api ->
-                        Log.d(TAG, "Syncing new enrollment to Sal esforce: ${product.text}")
-                        val sfId = api.createProduct(
-                            productName = "test product ${product.text}",
-                            productCode = product.text,
-                            description = "ignore this beautiful description so full of life and meriment",
-                            isActive = true
-                        )
 
-                        if (sfId != null) {
-                            Log.i(TAG, "Successfully synced to Salesforce with ID: $sfId")
-                        } else {
-                            Log.e(TAG, "Failed to sync ${product.text} to Salesforce")
+        scope.launch {
+            try {
+                for (product in productDataList) {
+                    if (product.text.isNotEmpty()) {
+                        if (salesforceAPI == null) {
+                            Log.e(TAG, "Salesforce API not initialized")
+                            handleEnrollmentFailure("Salesforce API not initialized")
                             return@launch
                         }
+
+                        Log.d(TAG, "Syncing new enrollment to Salesforce: ${product.text}")
+                        val sfId = salesforceAPI!!.createItem(
+                            name = product.text,
+                            description = "ignore this beautiful description so full of life and meriment",
+                            defaultLocation = "a1LRL000005kAj32AE",  // or provide a location if needed
+                            itemGroup = "a1JRL000015NcfQ2AS"  // or provide a group if needed
+                        )
+
+                        if (sfId == null) {
+                            Log.e(TAG, "Failed to sync ${product.text} to Salesforce - skipping")
+                            withContext(Dispatchers.Main) {
+                                viewModel.updateToastMessage(message = "Enrollment failed for ${product.text}. Duplicate entry in Salesforce Org")
+                            }
+                            continue  // Skip this product, continue with others
+                        }
+
+                        Log.i(TAG, "Successfully synced to Salesforce with ID: $sfId")
+
+                        // Save locally
+                        val arrayOfDescriptor =
+                            extractor?.generateSingleDescriptor(product.crop, executorService)?.get()
+                        featureStorage!!.addDescriptors(product.text, arrayOfDescriptor, true)
+
+                        // Save image crop
+                        val timestampedFolder = FileUtils.getTimeStampedFolderName()
+                        FileUtils.saveBitmap(
+                            product.crop,
+                            timestampedFolder + "/" + product.text,
+                            "productcrop"
+                        )
                     }
-                    val arrayOfDescriptor =
-                        extractor?.generateSingleDescriptor(product.crop, executorService)?.get()
-                    featureStorage!!.addDescriptors(product.text, arrayOfDescriptor, true)
                 }
+                initProductRecognition(isEnrollmentRequested = true)
+            } catch (e: Exception) {
+                Log.e(TAG, "Exception during enrollment: ${e.message}", e)
+                handleEnrollmentFailure("Enrollment exception: ${e.message}")
             }
-            initProductRecognition(isEnrollmentRequested = true)
+        }
+    }
+
+    private fun handleEnrollmentFailure(errorMessage: String) {
+        Log.e(TAG, "Enrollment failed: $errorMessage")
+        // CRITICAL: Must run on Main thread to update UI state
+        kotlinx.coroutines.MainScope().launch {
+            updateProductEnrollmentState(ProductEnrollmentState.COMPLETED_FAILURE)
+            viewModel.updateToastMessage(message = "Enrollment failed: $errorMessage")
         }
     }
 
@@ -532,17 +561,20 @@ class ProductEnrollmentRecognition(
                                     Log.i(TAG, "  Size: ${productData.crop.width}x${productData.crop.height}")
 
                                     if (productData.text.isNotBlank()) {
-                                        val sfProduct = api.getProductBySKU(productData.text)
-                                        if (sfProduct != null) {
-                                            productData.sfName = sfProduct.name
+                                        val sfItem = api.getItemByName(productData.text)
+                                        if (sfItem != null) {
+                                            productData.sfName = sfItem.name
 
                                             Log.i(TAG, "  ✓ FOUND IN SALESFORCE:")
-                                            Log.i(TAG, "    ID: ${sfProduct.id}")
-                                            Log.i(TAG, "    Name: ${sfProduct.name ?: "N/A"}")
-                                            Log.i(TAG, "    Code: ${sfProduct.productCode ?: "N/A"}")
-                                            Log.i(TAG, "    Desc: ${sfProduct.description ?: "N/A"}")
-                                            Log.i(TAG, "    Family: ${sfProduct.family ?: "N/A"}")
-                                            Log.i(TAG, "    Active: ${sfProduct.isActive ?: false}")
+                                            Log.i(TAG, "    ID: ${sfItem.id}")
+                                            Log.i(TAG, "    Name: ${sfItem.name ?: "N/A"}")
+                                            Log.i(TAG, "    Desc: ${sfItem.description ?: "N/A"}")
+
+                                            val sfContact = api.getContactFromItem(sfItem.id)
+                                            if (sfContact != null)
+                                            {
+                                                Log.d(TAG, "related contact from item: ${sfContact.name}");
+                                            }
                                         } else {
                                             productData.sfName = null
                                             Log.w(TAG, "  ✗ NOT FOUND IN SALESFORCE")
@@ -614,7 +646,7 @@ class ProductEnrollmentRecognition(
         viewModel.updateProductRecognitionResult(results = results)
     }
 
-    fun updateProductEnrollmentState(state: Boolean) {
+    fun updateProductEnrollmentState(state: ProductEnrollmentState) {
         viewModel.updateProductEnrollmentState(state = state)
     }
 

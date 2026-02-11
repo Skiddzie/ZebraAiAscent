@@ -2,8 +2,10 @@ package com.zebra.aidatacapturedemo.salesforce
 
 import android.util.Log
 import com.google.gson.Gson
+import com.zebra.aidatacapturedemo.salesforce.models.Contact__c
 import com.zebra.aidatacapturedemo.salesforce.models.CreateResponse
 import com.zebra.aidatacapturedemo.salesforce.models.Product2
+import com.zebra.aidatacapturedemo.salesforce.models.Item__c
 import com.zebra.aidatacapturedemo.salesforce.models.SalesforceQueryResponse
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -11,12 +13,11 @@ import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
-import kotlin.jvm.java
-import kotlin.reflect.KClass
+import java.net.URLEncoder
 
 
 class SalesforceAPI(
-    private val instanceUrl: String,  // e.g., "https://yourinstance.salesforce.com"
+    private val instanceUrl: String,
     private val accessToken: String
 ) {
     private val client = OkHttpClient()
@@ -32,7 +33,6 @@ class SalesforceAPI(
      */
     suspend fun queryProduct(sku: String): SalesforceQueryResponse? = withContext(Dispatchers.IO) {
         try {
-            // SOQL Query - adjust fields based on your Salesforce schema
             val soqlQuery = """
                 SELECT Id, Name, ProductCode, Description, Family, IsActive, 
                        StockKeepingUnit, QuantityUnitOfMeasure
@@ -40,7 +40,7 @@ class SalesforceAPI(
                 WHERE ProductCode = '$sku' OR StockKeepingUnit = '$sku'
             """.trimIndent().replace("\n", " ")
 
-            val encodedQuery = java.net.URLEncoder.encode(soqlQuery, "UTF-8")
+            val encodedQuery = URLEncoder.encode(soqlQuery, "UTF-8")
             val url = "$instanceUrl/services/data/v60.0/query/?q=$encodedQuery"
 
             Log.d(TAG, "Querying Salesforce: $url")
@@ -114,6 +114,200 @@ class SalesforceAPI(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Caught error: ${e.message}")
+            null
+        }
+    }
+    /**
+     * Get Contact from Item by traversing Sales Order Lines → Sales Order → Contact
+     * @param itemId The Id of the PBSI__PBSI_Item__c record
+     * @return Contact record or null if not found
+     */
+    suspend fun getContactFromItem(itemId: String): Contact__c? = withContext(Dispatchers.IO) {
+        try {
+            // Query Sales Order Lines for this Item, and traverse up to Contact
+            val query = """SELECT Id, 
+            PBSI__Sales_Order__r.PBSI__Contact__c
+            FROM PBSI__PBSI_Sales_Order_Line__c
+            WHERE PBSI__Item__c = '$itemId'
+            LIMIT 1
+        """.trimIndent().replace("\n", " ")
+
+            val encodedQuery = URLEncoder.encode(query, "UTF-8")
+            val url = "$instanceUrl/services/data/v60.0/query?q=$encodedQuery"
+
+            Log.d(TAG, "Querying Contact from Item: $itemId")
+
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer $accessToken")
+                .addHeader("Content-Type", "application/json")
+                .get()
+                .build()
+
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string()
+
+            if (response.isSuccessful && responseBody != null) {
+                Log.d(TAG, "Query Success: $responseBody")
+
+                // Parse using Gson with a response wrapper
+                val queryResponse = gson.fromJson(responseBody, SalesforceQueryResponse::class.java)
+
+                if (queryResponse?.records?.isNotEmpty() == true) {
+                    val orderLineRecord = queryResponse.records[0]
+
+                    // Extract the Contact ID from the nested Sales Order relationship
+                    val salesOrderData = orderLineRecord as? Map<*, *>
+                    val salesOrder = salesOrderData?.get("PBSI__Sales_Order__r") as? Map<*, *>
+                    val contactId = salesOrder?.get("PBSI__Contact__c") as? String
+
+                    if (contactId != null) {
+                        Log.d(TAG, "Found Contact ID: $contactId")
+                        return@withContext getContactById(contactId)
+                    } else {
+                        Log.w(TAG, "No Contact found on Sales Order")
+                        return@withContext null
+                    }
+                } else {
+                    Log.w(TAG, "No Sales Order Lines found for Item: $itemId")
+                    return@withContext null
+                }
+            } else {
+                Log.e(TAG, "Query Error: ${response.code} - $responseBody")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception querying Contact from Item: ${e.message}", e)
+            null
+        }
+    }
+
+    /**
+     * Get full Contact record by ID
+     */
+    private suspend fun getContactById(contactId: String): Contact__c? = withContext(Dispatchers.IO) {
+        try {
+            val query = """
+            SELECT Id, Name, PBSI__Email__c, PBSI__Phone__c, PBSI__Address__c
+            FROM PBSI__Contact__c
+            WHERE Id = '$contactId'
+        """.trimIndent().replace("\n", " ")
+
+            val encodedQuery = URLEncoder.encode(query, "UTF-8")
+            val url = "$instanceUrl/services/data/v60.0/query?q=$encodedQuery"
+
+            Log.d(TAG, "Fetching Contact: $contactId")
+
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer $accessToken")
+                .addHeader("Content-Type", "application/json")
+                .get()
+                .build()
+
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string()
+
+            if (response.isSuccessful && responseBody != null) {
+                val queryResponse = gson.fromJson(responseBody, SalesforceQueryResponse::class.java)
+                queryResponse?.records?.firstOrNull()?.let { record ->
+                    val contactJson = gson.toJson(record)
+                    gson.fromJson(contactJson, Contact__c::class.java)
+                }
+            } else {
+                Log.e(TAG, "Contact Query Error: ${response.code} - $responseBody")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception fetching Contact: ${e.message}", e)
+            null
+        }
+    }
+    /**
+     * Get Item by Name
+     */
+    suspend fun getItemByName(name: String): Item__c? = withContext(Dispatchers.IO) {
+        try {
+            val query = """
+            SELECT Id, Name, PBSI__Description__c, PBSI__Default_Location__c, PBSI__Item_Group__c
+            FROM PBSI__PBSI_Item__c 
+            WHERE Name = '$name'
+        """.trimIndent().replace("\n", " ")
+
+            val encodedQuery = URLEncoder.encode(query, "UTF-8")
+            val url = "$instanceUrl/services/data/v60.0/query?q=$encodedQuery"
+
+            Log.d(TAG, "Querying Item by Name: $name")
+
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer $accessToken")
+                .addHeader("Content-Type", "application/json")
+                .get()
+                .build()
+
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string()
+
+            if (response.isSuccessful && responseBody != null) {
+                Log.d(TAG, "Item Query Success: $responseBody")
+                val queryResponse = gson.fromJson(responseBody, SalesforceQueryResponse::class.java)
+                queryResponse?.records?.firstOrNull()?.let { record ->
+                    val itemJson = gson.toJson(record)
+                    gson.fromJson(itemJson, Item__c::class.java)
+                }
+            } else {
+                Log.e(TAG, "Item Query Error: ${response.code} - $responseBody")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception querying Item: ${e.message}", e)
+            null
+        }
+    }
+
+    /**
+     * Create Item
+     */
+    suspend fun createItem(
+        name: String,
+        description: String?,
+        defaultLocation: String?,
+        itemGroup: String?
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            val url = "$instanceUrl/services/data/v60.0/sobjects/PBSI__PBSI_Item__c"
+
+            val fieldMap = mutableMapOf<String, Any>("Name" to name)
+
+            description?.let { fieldMap["PBSI__Description__c"] = it }
+            defaultLocation?.let { fieldMap["PBSI__Default_Location__c"] = it }
+            itemGroup?.let { fieldMap["PBSI__Item_Group__c"] = it }
+
+            val jsonBody = gson.toJson(fieldMap)
+            val requestBody = jsonBody.toRequestBody("application/json".toMediaType())
+
+            Log.d(TAG, "Creating Item with body: $jsonBody")
+
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer $accessToken")
+                .post(requestBody)
+                .build()
+
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string()
+
+            if (response.isSuccessful && responseBody != null) {
+                val createResponse = gson.fromJson(responseBody, CreateResponse::class.java)
+                Log.d(TAG, "Success! Item created with ID: ${createResponse.id}")
+                createResponse.id
+            } else {
+                Log.e(TAG, "Salesforce Error: ${response.code} - $responseBody")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception creating Item: ${e.message}", e)
             null
         }
     }

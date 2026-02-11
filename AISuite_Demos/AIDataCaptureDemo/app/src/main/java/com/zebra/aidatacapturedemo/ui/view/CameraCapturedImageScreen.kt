@@ -74,6 +74,7 @@ import coil.compose.rememberAsyncImagePainter
 import com.zebra.aidatacapturedemo.R
 import com.zebra.aidatacapturedemo.data.AIDataCaptureDemoUiState
 import com.zebra.aidatacapturedemo.data.ProductData
+import com.zebra.aidatacapturedemo.data.ProductEnrollmentState
 import com.zebra.aidatacapturedemo.model.FileUtils
 import com.zebra.aidatacapturedemo.ui.view.Variables.borderPrimaryMain
 import com.zebra.aidatacapturedemo.ui.view.Variables.mainPrimary
@@ -457,8 +458,7 @@ fun DrawEnrollProductsIcon(
                         .fillMaxWidth()
                         .wrapContentHeight()
                         .clickable {
-                            saveProductDataList(viewModel, productResults)
-                            viewModel.enrollProductIndex()
+                            viewModel.enrollProductIndex()  // ← Just call enrollment
                             isProductEnrollmentProgressBarVisibleOnChange(true)
                         }
                 ) {
@@ -488,9 +488,14 @@ fun DrawEnrollProductsIcon(
         }
     }
 
-    if (uiState.isProductEnrollmentCompleted) {
+    if (uiState.productEnrollmentState == ProductEnrollmentState.COMPLETED_SUCCESS) {
         viewModel.handleBackButton(navController)
         isProductEnrollmentProgressBarVisibleOnChange(false)
+    } else if (uiState.productEnrollmentState == ProductEnrollmentState.COMPLETED_FAILURE) {
+        // Just hide the spinner, don't navigate away
+        isProductEnrollmentProgressBarVisibleOnChange(false)
+        // Reset state for next attempt
+        viewModel.updateProductEnrollmentState(ProductEnrollmentState.NOT_STARTED)
     }
 }
 

@@ -135,6 +135,14 @@ data class RetailShelfSettings(
 data class ProductRecognitionSettings(
     var commonSettings: CommonSettings = CommonSettings(),
 )
+
+enum class ProductEnrollmentState {
+    NOT_STARTED,
+    IN_PROGRESS,
+    COMPLETED_SUCCESS,
+    COMPLETED_FAILURE
+}
+
 /**
  * AIDataCaptureDemoUiState class used to store UI state data
  * This is used to save data from updated by UI as well as Model
@@ -160,8 +168,7 @@ data class AIDataCaptureDemoUiState(
     var isRetailShelfModelDemoReady: Boolean = false,
     var isCameraReady: Boolean = false,
     var cameraError: String? = null,
-    var isProductEnrollmentCompleted: Boolean = false,
-    var currentBitmap: Bitmap = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888),
+    val productEnrollmentState: ProductEnrollmentState = ProductEnrollmentState.NOT_STARTED,    var currentBitmap: Bitmap = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888),
     var captureBitmap: Bitmap? = null,
     var bboxes: Array<BBox?> = arrayOf(),
     var productResults: MutableList<ProductData> = mutableListOf(),
