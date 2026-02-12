@@ -2,7 +2,7 @@ package com.zebra.aidatacapturedemo.salesforce
 
 import android.util.Log
 import com.google.gson.Gson
-import com.zebra.aidatacapturedemo.salesforce.models.Contact__c
+import com.zebra.aidatacapturedemo.salesforce.models.Contact
 import com.zebra.aidatacapturedemo.salesforce.models.CreateResponse
 import com.zebra.aidatacapturedemo.salesforce.models.Product2
 import com.zebra.aidatacapturedemo.salesforce.models.Item__c
@@ -122,7 +122,7 @@ class SalesforceAPI(
      * @param itemId The Id of the PBSI__PBSI_Item__c record
      * @return Contact record or null if not found
      */
-    suspend fun getContactFromItem(itemId: String): Contact__c? = withContext(Dispatchers.IO) {
+    suspend fun getContactFromItem(itemId: String): Contact? = withContext(Dispatchers.IO) {
         try {
             // Query Sales Order Lines for this Item, and traverse up to Contact
             val query = """SELECT Id, 
@@ -155,11 +155,21 @@ class SalesforceAPI(
 
                 if (queryResponse?.records?.isNotEmpty() == true) {
                     val orderLineRecord = queryResponse.records[0]
-
+                    Log.d(TAG, "Record type: ${orderLineRecord?.javaClass}")
+                    Log.d(TAG, "Record content: $orderLineRecord")
                     // Extract the Contact ID from the nested Sales Order relationship
                     val salesOrderData = orderLineRecord as? Map<*, *>
+
+                    Log.d(TAG, "SalesOrderData: $salesOrderData")
+
                     val salesOrder = salesOrderData?.get("PBSI__Sales_Order__r") as? Map<*, *>
+
+                    Log.d(TAG, "SalesOrder: $salesOrder")
+
+
                     val contactId = salesOrder?.get("PBSI__Contact__c") as? String
+
+                    Log.d(TAG, "ContactId: $contactId")
 
                     if (contactId != null) {
                         Log.d(TAG, "Found Contact ID: $contactId")
@@ -185,11 +195,11 @@ class SalesforceAPI(
     /**
      * Get full Contact record by ID
      */
-    private suspend fun getContactById(contactId: String): Contact__c? = withContext(Dispatchers.IO) {
+    private suspend fun getContactById(contactId: String): Contact? = withContext(Dispatchers.IO) {
         try {
             val query = """
-            SELECT Id, Name, PBSI__Email__c, PBSI__Phone__c, PBSI__Address__c
-            FROM PBSI__Contact__c
+            SELECT Id, Name, Email, Phone
+            FROM Contact
             WHERE Id = '$contactId'
         """.trimIndent().replace("\n", " ")
 
@@ -212,7 +222,7 @@ class SalesforceAPI(
                 val queryResponse = gson.fromJson(responseBody, SalesforceQueryResponse::class.java)
                 queryResponse?.records?.firstOrNull()?.let { record ->
                     val contactJson = gson.toJson(record)
-                    gson.fromJson(contactJson, Contact__c::class.java)
+                    gson.fromJson(contactJson, Contact::class.java)
                 }
             } else {
                 Log.e(TAG, "Contact Query Error: ${response.code} - $responseBody")
@@ -315,8 +325,8 @@ class SalesforceAPI(
     /**
      * Get product details by SKU
      */
-    suspend fun getProductBySKU(sku: String): Product2? {
-        val response = queryProduct(sku)
-        return response?.records?.firstOrNull()
-    }
+//    suspend fun getProductBySKU(sku: String): Product2? {
+//        val response = queryProduct(sku)
+//        return response?.records?.firstOrNull()
+//    }
 }
