@@ -949,11 +949,17 @@ private fun DrawProductRecognitionResult(
                     scaledBBoxTopInPx + (rectangleHeight) / 2
                 )
                 val label = productResult.sfName?.takeIf { it.isNotBlank() } ?: productResult.text
-
                 drawContext.canvas.nativeCanvas.drawText(
                     label,
                     textOffset.x,
                     textOffset.y,
+                    paint
+                )
+                val contactLabel = productResult.contact?.get(0)?.name?.takeIf { it.isNotBlank() } ?: ""
+                drawContext.canvas.nativeCanvas.drawText(
+                    contactLabel,
+                    textOffset.x,
+                    textOffset.y + paint.textSize + 5f,
                     paint
                 )
             }

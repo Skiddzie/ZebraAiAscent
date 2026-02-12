@@ -5,6 +5,8 @@ import android.graphics.Point
 import android.util.Log
 import com.zebra.ai.vision.detector.BBox
 import com.zebra.ai.vision.detector.Recognizer.Recognition
+import com.zebra.aidatacapturedemo.salesforce.models.Contact
+
 
 /**
  * ProductData class used to store product recognition data
@@ -17,8 +19,10 @@ class ProductData(
     var text: String,
     var bBox: BBox,
     var crop: Bitmap,
-    var sfName: String? = null
+    var sfName: String? = null,
+    var contact: List<Contact>? = null
 )
+
 
 /**
  * toProductData function used to convert input bitmap, products and recognitions to product data

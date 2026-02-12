@@ -122,20 +122,19 @@ class SalesforceAPI(
      * @param itemId The Id of the PBSI__PBSI_Item__c record
      * @return Contact record or null if not found
      */
-    suspend fun getContactFromItem(itemId: String): Contact? = withContext(Dispatchers.IO) {
+    suspend fun getContactFromItem(itemId: String): List<Contact> = withContext(Dispatchers.IO) {
         try {
-            // Query Sales Order Lines for this Item, and traverse up to Contact
+            // Query ALL Sales Order Lines for this Item, and traverse up to Contact
             val query = """SELECT Id, 
-            PBSI__Sales_Order__r.PBSI__Contact__c
-            FROM PBSI__PBSI_Sales_Order_Line__c
-            WHERE PBSI__Item__c = '$itemId'
-            LIMIT 1
-        """.trimIndent().replace("\n", " ")
+        PBSI__Sales_Order__r.PBSI__Contact__c
+        FROM PBSI__PBSI_Sales_Order_Line__c
+        WHERE PBSI__Item__c = '$itemId'
+    """.trimIndent().replace("\n", " ")
 
             val encodedQuery = URLEncoder.encode(query, "UTF-8")
             val url = "$instanceUrl/services/data/v60.0/query?q=$encodedQuery"
 
-            Log.d(TAG, "Querying Contact from Item: $itemId")
+            Log.d(TAG, "Querying Contacts from Item: $itemId")
 
             val request = Request.Builder()
                 .url(url)
@@ -150,45 +149,40 @@ class SalesforceAPI(
             if (response.isSuccessful && responseBody != null) {
                 Log.d(TAG, "Query Success: $responseBody")
 
-                // Parse using Gson with a response wrapper
                 val queryResponse = gson.fromJson(responseBody, SalesforceQueryResponse::class.java)
 
                 if (queryResponse?.records?.isNotEmpty() == true) {
-                    val orderLineRecord = queryResponse.records[0]
-                    Log.d(TAG, "Record type: ${orderLineRecord?.javaClass}")
-                    Log.d(TAG, "Record content: $orderLineRecord")
-                    // Extract the Contact ID from the nested Sales Order relationship
-                    val salesOrderData = orderLineRecord as? Map<*, *>
+                    val contacts = mutableListOf<Contact>()
+                    val seenContactIds = mutableSetOf<String>() // Avoid duplicates
 
-                    Log.d(TAG, "SalesOrderData: $salesOrderData")
+                    queryResponse.records.forEach { orderLineRecord ->
+                        val salesOrderData = orderLineRecord as? Map<*, *>
+                        val salesOrder = salesOrderData?.get("PBSI__Sales_Order__r") as? Map<*, *>
+                        val contactId = salesOrder?.get("PBSI__Contact__c") as? String
 
-                    val salesOrder = salesOrderData?.get("PBSI__Sales_Order__r") as? Map<*, *>
-
-                    Log.d(TAG, "SalesOrder: $salesOrder")
-
-
-                    val contactId = salesOrder?.get("PBSI__Contact__c") as? String
-
-                    Log.d(TAG, "ContactId: $contactId")
-
-                    if (contactId != null) {
-                        Log.d(TAG, "Found Contact ID: $contactId")
-                        return@withContext getContactById(contactId)
-                    } else {
-                        Log.w(TAG, "No Contact found on Sales Order")
-                        return@withContext null
+                        if (contactId != null && !seenContactIds.contains(contactId)) {
+                            seenContactIds.add(contactId)
+                            val contact = getContactById(contactId)
+                            if (contact != null) {
+                                contacts.add(contact)
+                                Log.d(TAG, "Found Contact: ${contact.name} (ID: $contactId)")
+                            }
+                        }
                     }
+
+                    Log.d(TAG, "Total unique contacts found: ${contacts.size}")
+                    return@withContext contacts
                 } else {
                     Log.w(TAG, "No Sales Order Lines found for Item: $itemId")
-                    return@withContext null
+                    return@withContext emptyList()
                 }
             } else {
                 Log.e(TAG, "Query Error: ${response.code} - $responseBody")
-                null
+                emptyList()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Exception querying Contact from Item: ${e.message}", e)
-            null
+            Log.e(TAG, "Exception querying Contacts from Item: ${e.message}", e)
+            emptyList()
         }
     }
 

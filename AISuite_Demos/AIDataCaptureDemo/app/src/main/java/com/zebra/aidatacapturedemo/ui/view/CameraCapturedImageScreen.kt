@@ -3,6 +3,7 @@
 package com.zebra.aidatacapturedemo.ui.view
 
 import android.content.Context
+import android.graphics.Color.blue
 import android.view.WindowManager
 import android.view.WindowMetrics
 import androidx.activity.compose.BackHandler
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.TextSelectionColors
@@ -360,7 +362,8 @@ private fun DrawRetailShelfProductsUsingBox(
             productSKUChanged.value = false
         }
 
-        if (productData.text != null && productData.text != "") { // Product is Recognized with Higher confidence
+        if (productData.text != null && productData.text != "") {
+            // First box - product with SKU
             Box(
                 modifier = Modifier
                     .padding(
@@ -386,6 +389,39 @@ private fun DrawRetailShelfProductsUsingBox(
                         color = Color.White,
                         fontSize = (30f / displayMetricsDensity).sp
                     )
+                }
+            }
+
+            // Second box - contact name underneath
+            Box(
+                modifier = Modifier
+                    .padding(
+                        start = scaledBBoxLeftInDp,
+                        top = scaledBBoxBottomInDp  // Position it right below the first box
+                    )
+                    .background(color = Color.Blue.copy(alpha = 0.5F))
+                    .wrapContentWidth()
+                    .wrapContentHeight()
+            ) {
+                Column(
+                    modifier = Modifier.padding(start = 4.dp)
+                ) {
+                    val contactList = productData.contact
+                    if (contactList.isNullOrEmpty()) {
+                        Text(
+                            text = "No contacts",
+                            color = Color.White,
+                            fontSize = (20f / displayMetricsDensity).sp
+                        )
+                    } else {
+                        contactList.forEach { contact ->
+                            Text(
+                                text = contact.name ?: "Unknown",
+                                color = Color.White,
+                                fontSize = (20f / displayMetricsDensity).sp
+                            )
+                        }
+                    }
                 }
             }
         } else { // Product not Recognized

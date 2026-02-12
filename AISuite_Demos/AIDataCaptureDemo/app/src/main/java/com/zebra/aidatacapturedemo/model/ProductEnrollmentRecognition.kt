@@ -33,6 +33,7 @@ import kotlin.time.TimeSource
 
 import com.zebra.aidatacapturedemo.salesforce.SalesforceAPI
 import com.zebra.aidatacapturedemo.salesforce.models.Product2
+import com.zebra.aidatacapturedemo.salesforce.models.Contact
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 
@@ -573,7 +574,8 @@ class ProductEnrollmentRecognition(
                                             val sfContact = api.getContactFromItem(sfItem.id)
                                             if (sfContact != null)
                                             {
-                                                Log.d(TAG, "related contact from item: ${sfContact.name}");
+                                                productData.contact = sfContact
+                                                Log.d(TAG, "related contacts from item: ${sfContact}");
                                             }
                                         } else {
                                             productData.sfName = null
