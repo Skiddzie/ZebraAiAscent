@@ -236,6 +236,15 @@ fun AIDataCaptureUsecaseList(viewModel: AIDataCaptureDemoViewModel, navControlle
                 viewModel.initModel()
                 navController.navigate(route = Screen.DemoStart.route)
             })
+        AIDataCaptureListItem(
+            R.drawable.product_enrollment_recognition_icon,
+            stringResource(id = R.string.build_index),
+            "Build a product recognition index from images",
+            Variables.mainIcon1,
+            Variables.secondaryIcon1,
+            onItemClick = {
+                navController.navigate(route = Screen.IndexCreator.route)
+            })
     }
 }
 

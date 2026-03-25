@@ -1,6 +1,5 @@
 package com.zebra.aidatacapturedemo.ui.view
 
-import android.R.attr.strokeWidth
 import android.content.Context
 import android.view.WindowManager
 import android.view.WindowMetrics
@@ -17,11 +16,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentSize
@@ -35,10 +32,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScrollModifierNode
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -68,26 +63,26 @@ fun DemoStartScreen(
     innerPadding: PaddingValues,
     context: Context
 ) {
-    var isLoading = remember { mutableStateOf(true) }
-    var isStartDisabled = remember { mutableStateOf(true) }
+    val isLoading = remember { mutableStateOf(true) }
+    val isStartDisabled = remember { mutableStateOf(true) }
 
     val uiState = viewModel.uiState.collectAsState().value
     getDemoTitle(uiState.usecaseSelected)?.let { viewModel.updateAppBarTitle(stringResource(it)) }
-
 
     uiState.toastMessage?.let {
         viewModel.toast(it)
         viewModel.updateToastMessage(message = null)
     }
-    // Intercept back presses on this screen
+
     BackHandler(enabled = true) {
         viewModel.handleBackButton(navController)
     }
 
     val windowManager = getSystemService(context, WindowManager::class.java)
     val windowMetrics: WindowMetrics = windowManager.currentWindowMetrics
-    // draw smaller icon if device display height is 800px or less
+
     if (windowMetrics.bounds.height() <= 800) {
+        // ── Small screen ──────────────────────────────────────────────────────
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
@@ -96,19 +91,15 @@ fun DemoStartScreen(
                 .fillMaxHeight()
                 .padding(innerPadding)
         ) {
-
-            // Icon
             Spacer(Modifier.height(10.dp))
-
             UsecaseIcon(selectedUsecase = uiState.usecaseSelected)
-
             Spacer(Modifier.height(10.dp))
+
             Column(
                 modifier = Modifier
                     .wrapContentHeight()
                     .padding(start = 16.dp, end = 16.dp)
             ) {
-                // Heading:
                 val titleStringId = getSettingHeading(uiState.usecaseSelected)
                 if (titleStringId == null) {
                     TextviewBold(info = "")
@@ -116,7 +107,6 @@ fun DemoStartScreen(
                     TextviewBold(info = stringResource(titleStringId))
                 }
 
-                // Model Input Details:
                 Spacer(modifier = Modifier.height(4.dp))
                 Row {
                     viewModel.getInputSizeSelected()?.let {
@@ -125,7 +115,6 @@ fun DemoStartScreen(
                     }
                 }
 
-                // Resolution Details:
                 Spacer(modifier = Modifier.height(2.dp))
                 Row {
                     viewModel.getSelectedResolution()?.let {
@@ -135,7 +124,6 @@ fun DemoStartScreen(
                     }
                 }
 
-                // Inference Type Details:
                 Spacer(modifier = Modifier.height(2.dp))
                 Row {
                     viewModel.getProcessorSelectedIndex()?.let {
@@ -146,14 +134,12 @@ fun DemoStartScreen(
                 }
 
                 if (uiState.usecaseSelected == UsecaseState.OCRBarcodeFind.value) {
-                    // Barcode Switch
                     Spacer(modifier = Modifier.height(4.dp))
                     Row {
                         SwitchOption(
                             uiState.isBarcodeModelEnabled,
-                            SwitchOptionData(
-                                R.string.barcode_model,
-                                onItemSelected = { title, enabled ->
+                            SwitchOptionData(R.string.barcode_model,
+                                onItemSelected = { _, enabled ->
                                     viewModel.updateBarcodeModelEnabled(enabled)
                                     viewModel.deinitModel()
                                     viewModel.initModel()
@@ -164,9 +150,8 @@ fun DemoStartScreen(
                     Row {
                         SwitchOption(
                             uiState.isOCRModelEnabled,
-                            SwitchOptionData(
-                                R.string.ocr_model,
-                                onItemSelected = { title, enabled ->
+                            SwitchOptionData(R.string.ocr_model,
+                                onItemSelected = { _, enabled ->
                                     viewModel.updateOCRModelEnabled(enabled)
                                     viewModel.deinitModel()
                                     viewModel.initModel()
@@ -174,7 +159,7 @@ fun DemoStartScreen(
                         )
                     }
                 }
-                // Restore Clickable Text:
+
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = stringResource(R.string.restore_default),
@@ -196,21 +181,32 @@ fun DemoStartScreen(
                 )
             }
 
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxHeight()
                     .padding(bottom = 24.dp),
-                verticalAlignment = Alignment.Bottom
+                verticalArrangement = Arrangement.Bottom,
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                if(isStartDisabled.value == true){
+                ButtonOption(
+                    ButtonData(
+                        R.string.build_index,
+                        mainPrimary,
+                        1.0F,
+                        true,
+                        onButtonClick = {
+                            navController.navigate(route = Screen.IndexCreator.route)
+                        })
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                if (isStartDisabled.value) {
                     ButtonOption(
                         ButtonData(
                             R.string.start_scan,
                             mainDisabled,
                             1.0F,
                             false,
-                            onButtonClick = {
-                            })
+                            onButtonClick = {})
                     )
                 } else {
                     ButtonOption(
@@ -228,6 +224,7 @@ fun DemoStartScreen(
         }
 
     } else {
+        // ── Large screen ──────────────────────────────────────────────────────
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
@@ -236,19 +233,15 @@ fun DemoStartScreen(
                 .fillMaxHeight()
                 .padding(innerPadding)
         ) {
-
-            // Icon
             Spacer(Modifier.height(37.dp))
-
             UsecaseIcon(selectedUsecase = uiState.usecaseSelected)
-
             Spacer(Modifier.height(48.dp))
+
             Column(
                 modifier = Modifier
                     .wrapContentHeight()
                     .padding(start = 16.dp, end = 16.dp)
             ) {
-                // Heading:
                 val titleStringId = getSettingHeading(uiState.usecaseSelected)
                 if (titleStringId == null) {
                     TextviewBold(info = "")
@@ -256,7 +249,6 @@ fun DemoStartScreen(
                     TextviewBold(info = stringResource(titleStringId))
                 }
 
-                // Model Input Details:
                 Spacer(modifier = Modifier.height(8.dp))
                 Row {
                     viewModel.getInputSizeSelected()?.let {
@@ -265,7 +257,6 @@ fun DemoStartScreen(
                     }
                 }
 
-                // Resolution Details:
                 Spacer(modifier = Modifier.height(4.dp))
                 Row {
                     viewModel.getSelectedResolution()?.let {
@@ -275,7 +266,6 @@ fun DemoStartScreen(
                     }
                 }
 
-                // Inference Type Details:
                 Spacer(modifier = Modifier.height(4.dp))
                 Row {
                     viewModel.getProcessorSelectedIndex()?.let {
@@ -286,14 +276,12 @@ fun DemoStartScreen(
                 }
 
                 if (uiState.usecaseSelected == UsecaseState.OCRBarcodeFind.value) {
-                    // Barcode Switch
                     Spacer(modifier = Modifier.height(16.dp))
                     Row {
                         SwitchOption(
                             uiState.isBarcodeModelEnabled,
-                            SwitchOptionData(
-                                R.string.barcode_model,
-                                onItemSelected = { title, enabled ->
+                            SwitchOptionData(R.string.barcode_model,
+                                onItemSelected = { _, enabled ->
                                     viewModel.updateBarcodeModelEnabled(enabled)
                                     viewModel.deinitModel()
                                     viewModel.initModel()
@@ -304,9 +292,8 @@ fun DemoStartScreen(
                     Row {
                         SwitchOption(
                             uiState.isOCRModelEnabled,
-                            SwitchOptionData(
-                                R.string.ocr_model,
-                                onItemSelected = { title, enabled ->
+                            SwitchOptionData(R.string.ocr_model,
+                                onItemSelected = { _, enabled ->
                                     viewModel.updateOCRModelEnabled(enabled)
                                     viewModel.deinitModel()
                                     viewModel.initModel()
@@ -314,7 +301,7 @@ fun DemoStartScreen(
                         )
                     }
                 }
-                // Restore Clickable Text:
+
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = stringResource(R.string.restore_default),
@@ -336,21 +323,32 @@ fun DemoStartScreen(
                 )
             }
 
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxHeight()
                     .padding(bottom = 24.dp),
-                verticalAlignment = Alignment.Bottom
+                verticalArrangement = Arrangement.Bottom,
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                if(isStartDisabled.value == true){
+                ButtonOption(
+                    ButtonData(
+                        R.string.build_index,
+                        mainPrimary,
+                        1.0F,
+                        true,
+                        onButtonClick = {
+                            navController.navigate(route = Screen.IndexCreator.route)
+                        })
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                if (isStartDisabled.value) {
                     ButtonOption(
                         ButtonData(
                             R.string.start_scan,
                             mainDisabled,
                             1.0F,
                             false,
-                            onButtonClick = {
-                            })
+                            onButtonClick = {})
                     )
                 } else {
                     ButtonOption(
@@ -367,56 +365,29 @@ fun DemoStartScreen(
             }
         }
     }
+
     LoadingScreen(uiState, isLoading, isStartDisabled)
 }
 
 @Composable
 private fun getSelectedInferenceType(processorSelectedIndex: Int): String {
     return when (processorSelectedIndex) {
-        0 -> {
-            stringResource(R.string.processor_auto)
-        }
-
-        1 -> {
-            stringResource(R.string.processor_dsp_short)
-        }
-
-        2 -> {
-            stringResource(R.string.processor_gpu_short)
-        }
-
-        3 -> {
-            stringResource(R.string.processor_cpu_short)
-        }
-
-        else -> {
-            stringResource(R.string.processor_auto)
-        }
+        0 -> stringResource(R.string.processor_auto)
+        1 -> stringResource(R.string.processor_dsp_short)
+        2 -> stringResource(R.string.processor_gpu_short)
+        3 -> stringResource(R.string.processor_cpu_short)
+        else -> stringResource(R.string.processor_auto)
     }
 }
 
 @Composable
 private fun getSelectedResolution(resolutionSelectedIndex: Int): String {
     return when (resolutionSelectedIndex) {
-        0 -> {
-            "${stringResource(R.string.resolution_size_1280)}"
-        }
-
-        1 -> {
-            "${stringResource(R.string.resolution_size_1920)}"
-        }
-
-        2 -> {
-            "${stringResource(R.string.resolution_size_2688)}"
-        }
-
-        3 -> {
-            "${stringResource(R.string.resolution_size_3840)}"
-        }
-
-        else -> {
-            TODO("Unknown Resolution found $resolutionSelectedIndex")
-        }
+        0 -> stringResource(R.string.resolution_size_1280)
+        1 -> stringResource(R.string.resolution_size_1920)
+        2 -> stringResource(R.string.resolution_size_2688)
+        3 -> stringResource(R.string.resolution_size_3840)
+        else -> TODO("Unknown Resolution found $resolutionSelectedIndex")
     }
 }
 
@@ -429,12 +400,7 @@ fun UsecaseIcon(selectedUsecase: String) {
             .width(88.dp)
             .height(88.dp)
             .background(
-                shape = RoundedCornerShape(
-                    topStart = 6.dp,
-                    topEnd = 6.dp,
-                    bottomStart = 6.dp,
-                    bottomEnd = 6.dp
-                ),
+                shape = RoundedCornerShape(6.dp),
                 brush = Brush.verticalGradient(
                     colors = listOf(
                         getIconMainColor(selectedUsecase),
@@ -461,18 +427,16 @@ fun ModalLoadingOverlay(onDismissRequest: () -> Unit) {
     Dialog(
         onDismissRequest = onDismissRequest,
         properties = DialogProperties(
-            usePlatformDefaultWidth = false, // Crucial for full width
-            decorFitsSystemWindows = false // Allows drawing under system bars if configured in Activity
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
         )
     ) {
-        // Block user interaction with the UI below the overlay
         Box(
             modifier = Modifier
                 .wrapContentSize()
-                .background(Color.White.copy(alpha = 0.0f)) // Semi-transparent background
+                .background(Color.White.copy(alpha = 0.0f))
                 .pointerInput(Unit) {
-                    // Intercept all tap gestures so they don't reach the underlying content
-                    detectTapGestures(onTap = { /* Do nothing */ })
+                    detectTapGestures(onTap = { })
                 },
             contentAlignment = Alignment.Center
         ) {
@@ -513,32 +477,31 @@ fun ModalLoadingOverlay(onDismissRequest: () -> Unit) {
                 )
             }
         }
-
-        // Handle the back button press to prevent dismissal during critical ops
-        BackHandler {
-            onDismissRequest()
-        }
+        BackHandler { onDismissRequest() }
     }
 }
 
 @Composable
-fun LoadingScreen(uiState: AIDataCaptureDemoUiState, isLoading: MutableState<Boolean>, isStartDisabled : MutableState<Boolean>) {
+fun LoadingScreen(
+    uiState: AIDataCaptureDemoUiState,
+    isLoading: MutableState<Boolean>,
+    isStartDisabled: MutableState<Boolean>
+) {
     when (uiState.usecaseSelected) {
         UsecaseState.OCRBarcodeFind.value -> {
             if (uiState.isBarcodeModelEnabled && uiState.isOCRModelEnabled) {
-                if(uiState.isBarcodeModelDemoReady && uiState.isOcrModelDemoReady) {
+                if (uiState.isBarcodeModelDemoReady && uiState.isOcrModelDemoReady) {
                     isLoading.value = false
                     isStartDisabled.value = false
                 } else {
                     isLoading.value = true
                     isStartDisabled.value = true
                 }
-            }
-            else if (!uiState.isBarcodeModelEnabled && !uiState.isOCRModelEnabled) {
+            } else if (!uiState.isBarcodeModelEnabled && !uiState.isOCRModelEnabled) {
                 isLoading.value = false
                 isStartDisabled.value = true
             } else if (uiState.isBarcodeModelEnabled && !uiState.isOCRModelEnabled) {
-                if(uiState.isBarcodeModelDemoReady) {
+                if (uiState.isBarcodeModelDemoReady) {
                     isLoading.value = false
                     isStartDisabled.value = false
                 } else {
@@ -546,7 +509,7 @@ fun LoadingScreen(uiState: AIDataCaptureDemoUiState, isLoading: MutableState<Boo
                     isStartDisabled.value = true
                 }
             } else if (!uiState.isBarcodeModelEnabled && uiState.isOCRModelEnabled) {
-                if(uiState.isOcrModelDemoReady) {
+                if (uiState.isOcrModelDemoReady) {
                     isLoading.value = false
                     isStartDisabled.value = false
                 } else {
@@ -587,13 +550,7 @@ fun LoadingScreen(uiState: AIDataCaptureDemoUiState, isLoading: MutableState<Boo
             }
         }
     }
-    if(isLoading.value == true) {
-        ModalLoadingOverlay(
-            onDismissRequest = {
-                // Optional: handle back button press during loading
-                // You can choose to ignore it or set isLoading to false
-                // BackHandler is used to block accidental navigation
-            }
-        )
+    if (isLoading.value) {
+        ModalLoadingOverlay(onDismissRequest = {})
     }
 }

@@ -32,6 +32,7 @@
     <string name="home_button">Home</string>
     <string name="enterproductsku">Enroll Product</string>
     <string name="enterproducthint">Scan or Type Product SKU</string>
+    <string name="build_index">Build Product Index</string>
 
     <string name="barcode_settings">Barcode Recognizer Settings</string>
     <string name="ocr_barcode_find_settings">OCR Find + Barcode Settings</string>

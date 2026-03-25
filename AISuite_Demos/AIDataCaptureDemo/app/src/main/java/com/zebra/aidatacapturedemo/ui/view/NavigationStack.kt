@@ -8,6 +8,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.zebra.aidatacapturedemo.viewmodel.AIDataCaptureDemoViewModel
+import com.zebra.aidatacapturedemo.indexcreator.IndexCreatorScreen
 
 sealed class Screen(val route: String) {
     object Start : Screen("start_screen")
@@ -17,6 +18,7 @@ sealed class Screen(val route: String) {
     object AdvancedOCRSettings : Screen("advanced_ocr_setting_screen")
     object Preview : Screen("preview_screen")
     object Capture : Screen("capture_screen")
+    object IndexCreator : Screen("index_creator_screen")
 }
 
 @Composable
@@ -68,6 +70,12 @@ fun NavigationStack(
                 navController = navController,
                 innerPadding,
                 context = context
+            )
+        }
+        composable(route = Screen.IndexCreator.route) {
+            viewModel.updateActiveScreenData(activeScreen = Screen.IndexCreator)
+            IndexCreatorScreen(
+                onNavigateUp = { navController.popBackStack() }
             )
         }
     }
