@@ -4,13 +4,17 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.util.zip.ZipInputStream
 
-// ─── UI state ─────────────────────────────────────────────────────────────────
+// ─── UI State ─────────────────────────────────────────────────────────────────
 
 enum class WorkflowStep {
     IDLE,
@@ -28,15 +32,10 @@ data class IndexCreatorUiState(
     val selectedImages: List<Uri> = emptyList(),
     val indexName: String = "",
     val step: WorkflowStep = WorkflowStep.IDLE,
-    /** 0.0 – 1.0 overall progress across all steps */
     val overallProgress: Float = 0f,
-    /** Human-readable status message */
     val statusMessage: String = "",
-    /** Number of embeddings generated so far */
     val embeddingsDone: Int = 0,
-    /** Server-side index generation progress (0–100) */
     val serverProgress: Int = 0,
-    /** Absolute path to the saved index zip on success */
     val savedFilePath: String? = null,
     val errorMessage: String? = null
 )
@@ -49,6 +48,8 @@ class IndexCreatorViewModel(application: Application) : AndroidViewModel(applica
 
     private val _uiState = MutableStateFlow(IndexCreatorUiState())
     val uiState: StateFlow<IndexCreatorUiState> = _uiState
+
+    // ── Public actions ────────────────────────────────────────────────────────
 
     fun onImagesSelected(uris: List<Uri>) {
         _uiState.update { it.copy(selectedImages = uris, errorMessage = null) }
@@ -66,7 +67,13 @@ class IndexCreatorViewModel(application: Application) : AndroidViewModel(applica
         _uiState.value = IndexCreatorUiState()
     }
 
-    fun startWorkflow() {
+    /**
+     * Kicks off the full 6-step workflow.
+     * [onIndexReady] is called with the path to the extracted .db file once the
+     * index has been downloaded and unzipped, so the caller can copy it into the
+     * SDK's cache directory and call applyProductDB().
+     */
+    fun startWorkflow(onIndexReady: ((String) -> Unit)? = null) {
         val images = _uiState.value.selectedImages
         val indexName = _uiState.value.indexName.trim()
 
@@ -84,12 +91,18 @@ class IndexCreatorViewModel(application: Application) : AndroidViewModel(applica
         }
 
         viewModelScope.launch {
-            runWorkflow(images, indexName)
+            runWorkflow(images, indexName, onIndexReady)
         }
     }
 
-    private suspend fun runWorkflow(images: List<Uri>, indexName: String) {
-        // ── Step 1: Generate embeddings ────────────────────────────────────────
+    // ── Workflow steps ────────────────────────────────────────────────────────
+
+    private suspend fun runWorkflow(
+        images: List<Uri>,
+        indexName: String,
+        onIndexReady: ((String) -> Unit)?
+    ) {
+        // Step 1 — Generate one embedding per image
         _uiState.update {
             it.copy(
                 step = WorkflowStep.GENERATING_EMBEDDINGS,
@@ -101,10 +114,11 @@ class IndexCreatorViewModel(application: Application) : AndroidViewModel(applica
         }
 
         val embeddings = mutableListOf<Pair<String, EmbeddingResponse>>()
+
         images.forEachIndexed { index, uri ->
             val label = "product_${index + 1}"
-            val result = repository.generateEmbedding(uri, label)
-            when (result) {
+
+            when (val result = repository.generateEmbedding(uri, label)) {
                 is WorkflowResult.Failure -> {
                     _uiState.update {
                         it.copy(
@@ -126,13 +140,13 @@ class IndexCreatorViewModel(application: Application) : AndroidViewModel(applica
                 )
             }
 
-            // Throttle to stay under 5 req/sec
+            // Stay under the 5 req/sec rate limit
             if (index < images.size - 1) {
                 delay(IndexCreatorConfig.EMBEDDING_THROTTLE_MS)
             }
         }
 
-        // ── Step 2: Create job ─────────────────────────────────────────────────
+        // Step 2 — Create an index job
         _uiState.update {
             it.copy(
                 step = WorkflowStep.CREATING_JOB,
@@ -143,14 +157,12 @@ class IndexCreatorViewModel(application: Application) : AndroidViewModel(applica
 
         val jobResult = repository.createJob()
         if (jobResult is WorkflowResult.Failure) {
-            _uiState.update {
-                it.copy(step = WorkflowStep.ERROR, errorMessage = jobResult.message)
-            }
+            _uiState.update { it.copy(step = WorkflowStep.ERROR, errorMessage = jobResult.message) }
             return
         }
         val jobId = (jobResult as WorkflowResult.Success).data.job_id
 
-        // ── Step 3: Upload embeddings ──────────────────────────────────────────
+        // Step 3 — Upload all embeddings to the job
         _uiState.update {
             it.copy(
                 step = WorkflowStep.UPLOADING_EMBEDDINGS,
@@ -161,13 +173,11 @@ class IndexCreatorViewModel(application: Application) : AndroidViewModel(applica
 
         val uploadResult = repository.uploadEmbeddings(jobId, embeddings)
         if (uploadResult is WorkflowResult.Failure) {
-            _uiState.update {
-                it.copy(step = WorkflowStep.ERROR, errorMessage = uploadResult.message)
-            }
+            _uiState.update { it.copy(step = WorkflowStep.ERROR, errorMessage = uploadResult.message) }
             return
         }
 
-        // ── Step 4: Trigger generation ─────────────────────────────────────────
+        // Step 4 — Trigger async index generation
         _uiState.update {
             it.copy(
                 step = WorkflowStep.GENERATING_INDEX,
@@ -178,13 +188,11 @@ class IndexCreatorViewModel(application: Application) : AndroidViewModel(applica
 
         val genResult = repository.triggerGeneration(jobId, indexName)
         if (genResult is WorkflowResult.Failure) {
-            _uiState.update {
-                it.copy(step = WorkflowStep.ERROR, errorMessage = genResult.message)
-            }
+            _uiState.update { it.copy(step = WorkflowStep.ERROR, errorMessage = genResult.message) }
             return
         }
 
-        // ── Step 5: Poll ───────────────────────────────────────────────────────
+        // Step 5 — Poll until the server finishes
         _uiState.update {
             it.copy(
                 step = WorkflowStep.POLLING,
@@ -199,28 +207,28 @@ class IndexCreatorViewModel(application: Application) : AndroidViewModel(applica
                 it.copy(
                     serverProgress = serverPct,
                     overallProgress = 0.65f + (serverPct / 100f) * 0.20f,
-                    statusMessage = status.message
-                        ?: "Processing… $serverPct%"
+                    statusMessage = status.message ?: "Processing… $serverPct%"
                 )
             }
         }
 
         if (pollResult is WorkflowResult.Failure) {
-            _uiState.update {
-                it.copy(step = WorkflowStep.ERROR, errorMessage = pollResult.message)
-            }
+            _uiState.update { it.copy(step = WorkflowStep.ERROR, errorMessage = pollResult.message) }
             return
         }
 
         val downloadUrl = (pollResult as WorkflowResult.Success).data.download_url
         if (downloadUrl.isNullOrBlank()) {
             _uiState.update {
-                it.copy(step = WorkflowStep.ERROR, errorMessage = "Job completed but no download URL was returned.")
+                it.copy(
+                    step = WorkflowStep.ERROR,
+                    errorMessage = "Job completed but no download URL was returned."
+                )
             }
             return
         }
 
-        // ── Step 6: Download ───────────────────────────────────────────────────
+        // Step 6 — Download the index zip
         _uiState.update {
             it.copy(
                 step = WorkflowStep.DOWNLOADING,
@@ -231,20 +239,58 @@ class IndexCreatorViewModel(application: Application) : AndroidViewModel(applica
 
         val downloadResult = repository.downloadIndex(downloadUrl, indexName)
         if (downloadResult is WorkflowResult.Failure) {
-            _uiState.update {
-                it.copy(step = WorkflowStep.ERROR, errorMessage = downloadResult.message)
-            }
+            _uiState.update { it.copy(step = WorkflowStep.ERROR, errorMessage = downloadResult.message) }
             return
         }
 
-        val file = (downloadResult as WorkflowResult.Success).data
+        val zipFile = (downloadResult as WorkflowResult.Success).data
+
+        // Step 7 — Unzip and hand the .db path back to the caller
+        _uiState.update {
+            it.copy(
+                overallProgress = 0.95f,
+                statusMessage = "Applying index…"
+            )
+        }
+
+        val dbPath = unzipAndGetDbPath(zipFile)
+        if (dbPath != null) {
+            onIndexReady?.invoke(dbPath)
+        }
+
         _uiState.update {
             it.copy(
                 step = WorkflowStep.DONE,
                 overallProgress = 1f,
-                statusMessage = "Index saved successfully!",
-                savedFilePath = file.absolutePath
+                statusMessage = "Index ready!",
+                savedFilePath = zipFile.absolutePath
             )
         }
     }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Extracts all entries from [zipFile] into the same directory,
+     * then returns the absolute path of the first .db file found.
+     */
+    private suspend fun unzipAndGetDbPath(zipFile: File): String? =
+        withContext(Dispatchers.IO) {
+            try {
+                val outDir = zipFile.parentFile!!
+                ZipInputStream(zipFile.inputStream()).use { zis ->
+                    var entry = zis.nextEntry
+                    while (entry != null) {
+                        val outFile = File(outDir, entry.name)
+                        outFile.parentFile?.mkdirs()
+                        outFile.outputStream().use { zis.copyTo(it) }
+                        zis.closeEntry()
+                        entry = zis.nextEntry
+                    }
+                }
+                outDir.listFiles()?.firstOrNull { it.extension == "db" }?.absolutePath
+            } catch (e: Exception) {
+                null
+            }
+        }
 }

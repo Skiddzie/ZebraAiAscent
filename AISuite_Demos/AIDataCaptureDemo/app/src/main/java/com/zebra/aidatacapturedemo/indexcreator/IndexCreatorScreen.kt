@@ -49,6 +49,7 @@ import com.zebra.aidatacapturedemo.indexcreator.WorkflowStep
 @Composable
 fun IndexCreatorScreen(
     onNavigateUp: () -> Unit = {},
+    onIndexReady: (String) -> Unit = {},
     viewModel: IndexCreatorViewModel = viewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -117,7 +118,7 @@ fun IndexCreatorScreen(
                         ) {
                             Icon(Icons.Default.CloudUpload, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
-                            Text("Build Index")
+                            Text("Build Index", color = Color.White)
                         }
                     }
 
@@ -184,7 +185,7 @@ private fun ImagePickerSection(
             Spacer(Modifier.width(8.dp))
             Text(
                 if (selectedImages.isEmpty()) "Select Images from Gallery"
-                else "Change Selection (${selectedImages.size} selected)"
+                else "Change Selection (${selectedImages.size} selected)", color = Color.White
             )
         }
 
@@ -246,9 +247,9 @@ private fun IndexNameField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text("Index Name") },
+        label = { Text("Index Name", color = Color.White)  },
         placeholder = { Text("e.g. product_catalog_2025") },
-        supportingText = { Text("Letters, numbers, and underscores only") },
+        supportingText = { Text("Letters, numbers, and underscores only", color = Color.White) },
         enabled = enabled,
         singleLine = true,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),

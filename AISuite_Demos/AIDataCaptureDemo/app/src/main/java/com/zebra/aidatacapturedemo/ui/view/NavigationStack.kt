@@ -9,6 +9,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.zebra.aidatacapturedemo.viewmodel.AIDataCaptureDemoViewModel
 import com.zebra.aidatacapturedemo.indexcreator.IndexCreatorScreen
+import com.zebra.aidatacapturedemo.model.FileUtils
+import java.io.File
+import java.nio.file.Paths
+import androidx.core.net.toUri
 
 sealed class Screen(val route: String) {
     object Start : Screen("start_screen")
@@ -75,8 +79,13 @@ fun NavigationStack(
         composable(route = Screen.IndexCreator.route) {
             viewModel.updateActiveScreenData(activeScreen = Screen.IndexCreator)
             IndexCreatorScreen(
-                onNavigateUp = { navController.popBackStack() }
+                onNavigateUp = { navController.popBackStack() },
+                onIndexReady = { dbPath ->
+                    val dbFile = java.io.File(dbPath)
+                    viewModel.loadProductIndex(dbFile.toUri())
+                }
             )
         }
     }
 }
+
