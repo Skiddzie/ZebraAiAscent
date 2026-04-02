@@ -235,9 +235,7 @@ class IndexCreatorRepository(private val context: Context) {
         indexName: String
     ): WorkflowResult<File> = withContext(Dispatchers.IO) {
         try {
-            val dir = context.getExternalFilesDir("indexes")
-                ?: context.filesDir.resolve("indexes").also { it.mkdirs() }
-            dir.mkdirs()
+            val dir = File(context.filesDir, "indexes").also { it.mkdirs() }
 
             val outFile = File(dir, "$indexName.zip")
             URL(downloadUrl).openStream().use { input ->

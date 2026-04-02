@@ -1675,6 +1675,15 @@ class AIDataCaptureDemoViewModel(
         FileUtils.saveFile(uri, productDBFile.toUri())
         productEnrollmentRecognition?.applyProductDB()
     }
+    fun loadProductIndexFromPath(dbPath: String) {
+        val srcFile = File(dbPath)
+        val destFile = File(mCacheDir, databaseFile)
+        Log.d(TAG, "Copying from: $dbPath")
+        Log.d(TAG, "Copying to: ${destFile.absolutePath}")
+        srcFile.copyTo(destFile, overwrite = true)
+        Log.d(TAG, "Copy done, file exists: ${destFile.exists()}, size: ${destFile.length()}")
+        productEnrollmentRecognition?.applyProductDB()
+    }
 
     /**
      * This function is used to delete the product data from the

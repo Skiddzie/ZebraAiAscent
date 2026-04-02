@@ -32,7 +32,7 @@ class SalesforceAuth {
                 Log.d(TAG, "Security token length = ${securityToken.length}")
 
                 val formBody = FormBody.Builder()
-                    .add("grant_type", "password")
+                    .add("grant_type", "client_credentials")
                     .add("client_id", clientId)
                     .add("client_secret", clientSecret)
                     .add("username", username)

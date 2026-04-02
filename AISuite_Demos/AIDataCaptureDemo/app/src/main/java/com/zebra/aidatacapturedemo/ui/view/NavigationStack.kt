@@ -1,6 +1,7 @@
 package com.zebra.aidatacapturedemo.ui.view
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.Lifecycle
@@ -81,8 +82,7 @@ fun NavigationStack(
             IndexCreatorScreen(
                 onNavigateUp = { navController.popBackStack() },
                 onIndexReady = { dbPath ->
-                    val dbFile = java.io.File(dbPath)
-                    viewModel.loadProductIndex(dbFile.toUri())
+                    viewModel.loadProductIndexFromPath(dbPath)
                 }
             )
         }

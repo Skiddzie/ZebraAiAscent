@@ -2,6 +2,7 @@ package com.zebra.aidatacapturedemo.indexcreator
 
 import android.app.Application
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -253,9 +254,14 @@ class IndexCreatorViewModel(application: Application) : AndroidViewModel(applica
             )
         }
 
+        Log.d("IndexCreator", "Zip file path: ${zipFile.absolutePath}")
+        Log.d("IndexCreator", "Zip file exists: ${zipFile.exists()}, size: ${zipFile.length()}")
         val dbPath = unzipAndGetDbPath(zipFile)
+        Log.d("IndexCreator", "dbPath from unzip: $dbPath")
         if (dbPath != null) {
             onIndexReady?.invoke(dbPath)
+        } else {
+            Log.d("IndexCreator", "dbPath was null, onIndexReady not called")
         }
 
         _uiState.update {
